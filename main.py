@@ -1,15 +1,16 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-from anthropic import Anthropic
+from groq import Groq
 
 app = Flask(__name__)
 
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "my_secret_token_123")
-CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-anthropic_client = Anthropic(api_key=CLAUDE_API_KEY)
+# Free Groq Client Initialize
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -31,12 +32,13 @@ def handle_messages():
                 if 'message' in messaging_event and 'text' in messaging_event['message']:
                     user_text = messaging_event['message']['text']
                     
-                    response = anthropic_client.messages.create(
-                        model="claude-3-haiku-20240307",
-                        max_tokens=300,
-                        messages=[{"role": "user", "content": user_text}]
+                    # Free Llama-3 AI Call via Groq
+                    completion = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[{"role": "user", "content": user_text}],
+                        max_tokens=300
                     )
-                    ai_reply = response.content[0].text
+                    ai_reply = completion.choices[0].message.content
                     send_instagram_dm(sender_id, ai_reply)
     except Exception as e:
         print("Error:", e)
