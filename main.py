@@ -86,13 +86,13 @@ def webhook():
     return "EVENT_RECEIVED", 200
 
 def get_groq_response(user_message):
-    if not groq_client:
-        print("[-] GROQ_API_KEY missing", flush=True)
+    if not GROQ_API_KEY:
+        print("[-] GROQ_API_KEY missing in environment variables", flush=True)
         return "AI service unconfigured."
     try:
-        completion = groq_client.chat.completions.create(
-            # Groq Active Supported Model
-            model="llama-3.1-8b-instant",
+        client = Groq(api_key=GROQ_API_KEY.strip())
+        completion = client.chat.completions.create(
+            model="llama-3.1-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
                 {"role": "user", "content": user_message}
@@ -107,13 +107,13 @@ def get_groq_response(user_message):
 
 def send_instagram_message(recipient_id, text_message):
     if not PAGE_ACCESS_TOKEN:
-        print("[-] PAGE_ACCESS_TOKEN missing", flush=True)
+        print("[-] PAGE_ACCESS_TOKEN missing in environment variables", flush=True)
         return
 
-    token = PAGE_ACCESS_TOKEN.strip()
+    clean_token = PAGE_ACCESS_TOKEN.strip()
 
     url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
-    params = {"access_token": token}
+    params = {"access_token": clean_token}
     headers = {"Content-Type": "application/json"}
     
     payload = {
