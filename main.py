@@ -68,11 +68,11 @@ def webhook():
                 if user_text and sender_id and not is_echo:
                     print(f"[+] Processing message from {sender_id}: {user_text}", flush=True)
                     
-                    # 1. Generate AI Reply
+                    # 1. Generate AI Reply via Groq
                     ai_reply = get_groq_response(user_text)
                     print(f"[+] AI Response: {ai_reply}", flush=True)
                     
-                    # 2. Send Message Back
+                    # 2. Send Message Back to Instagram User
                     send_instagram_message(sender_id, ai_reply)
 
     except Exception as e:
@@ -102,12 +102,12 @@ def get_groq_response(user_message):
         return "Sorry, I couldn't process that right now."
 
 def send_instagram_message(recipient_id, text_message):
-    """Send Message back using Meta Graph API"""
+    """Send Message back using Meta Graph API v20.0"""
     if not PAGE_ACCESS_TOKEN:
         print("[-] PAGE_ACCESS_TOKEN missing in Environment Variables", flush=True)
         return
 
-    url = f"https://graph.facebook.com/v19.0/{INSTAGRAM_ACCOUNT_ID}/messages"
+    url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
     headers = {"Content-Type": "application/json"}
     
