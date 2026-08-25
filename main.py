@@ -89,16 +89,32 @@ def get_groq_response(user_message):
         return "AI service unconfigured."
     try:
         client = Groq(api_key=GROQ_API_KEY.strip())
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-specdec",
-            messages=[
-                {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.7,
-            max_tokens=150
-        )
-        return completion.choices[0].message.content
+        
+        # Try active models with fallback
+        try:
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=150
+            )
+            return completion.choices[0].message.content
+        except Exception as inner_e:
+            print(f"[!] Primary model failed, trying fallback: {str(inner_e)}", flush=True)
+            completion = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                messages=[
+                    {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=150
+            )
+            return completion.choices[0].message.content
+
     except Exception as e:
         print(f"[-] GROQ ERROR: {str(e)}", flush=True)
         return "Error generating response."
@@ -108,7 +124,8 @@ def send_instagram_message(recipient_id, text_message):
         print("[-] PAGE_ACCESS_TOKEN missing", flush=True)
         return
 
-    clean_token = PAGE_ACCESS_TOKEN.strip().replace('"', '').replace("'", "")
+    # Clean space and quotes issue
+    clean_token = PAGE_ACCESS_TOKEN.strip().strip('"').strip("'")
 
     url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
     params = {"access_token": clean_token}
