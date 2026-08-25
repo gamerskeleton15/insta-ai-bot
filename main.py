@@ -39,16 +39,13 @@ def webhook():
     print(f"=== INCOMING PAYLOAD: {data} ===", flush=True)
 
     try:
-        # Extract entries from root payload
         entries = data.get("entry", [])
         if not entries and isinstance(data, list):
             entries = data
 
         for entry in entries:
-            # 1. Check direct 'messaging' list
             events = entry.get("messaging", [])
             
-            # 2. Check 'changes' format (Alternative Meta Payload)
             if not events and "changes" in entry:
                 for change in entry.get("changes", []):
                     val = change.get("value", {})
@@ -57,12 +54,10 @@ def webhook():
                     elif "text" in val or "message" in val:
                         events.append(val)
 
-            # 3. Process events
             for event in events:
                 sender_id = None
                 user_text = None
 
-                # Extract sender ID
                 if "sender" in event and "id" in event["sender"]:
                     sender_id = event["sender"]["id"]
                 elif "from" in event and "id" in event["from"]:
@@ -70,7 +65,6 @@ def webhook():
                 elif "from" in event and isinstance(event["from"], str):
                     sender_id = event["from"]
 
-                # Extract text message
                 if "message" in event:
                     msg = event["message"]
                     if isinstance(msg, dict):
@@ -101,9 +95,10 @@ def get_groq_response(user_message):
         return "AI service unconfigured."
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            # Updated to active stable Groq model
+            model="llama3-8b-8192",
             messages=[
-                {"role": "system", "content": "You are a concise Instagram bot assistant."},
+                {"role": "system", "content": "You are a concise Instagram bot assistant. Reply helpfully and briefly."},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,
@@ -119,8 +114,11 @@ def send_instagram_message(recipient_id, text_message):
         print("[-] PAGE_ACCESS_TOKEN missing", flush=True)
         return
 
+    # Stripping white spaces if any accidentally pasted in env vars
+    token = PAGE_ACCESS_TOKEN.strip()
+
     url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
-    params = {"access_token": PAGE_ACCESS_TOKEN}
+    params = {"access_token": token}
     headers = {"Content-Type": "application/json"}
     
     payload = {
