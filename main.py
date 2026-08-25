@@ -62,8 +62,6 @@ def webhook():
                     sender_id = event["sender"]["id"]
                 elif "from" in event and "id" in event["from"]:
                     sender_id = event["from"]["id"]
-                elif "from" in event and isinstance(event["from"], str):
-                    sender_id = event["from"]
 
                 if "message" in event:
                     msg = event["message"]
@@ -76,8 +74,6 @@ def webhook():
                         user_text = msg
                 elif "text" in event:
                     user_text = event.get("text")
-
-                print(f"[DEBUG] Extracted -> Sender: {sender_id} | Text: {user_text}", flush=True)
 
                 if sender_id and user_text:
                     print(f"[+] Processing message from {sender_id}: {user_text}", flush=True)
@@ -95,10 +91,10 @@ def get_groq_response(user_message):
         return "AI service unconfigured."
     try:
         completion = groq_client.chat.completions.create(
-            # Updated to active stable Groq model
-            model="llama3-8b-8192",
+            # Groq Active Supported Model
+            model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "You are a concise Instagram bot assistant. Reply helpfully and briefly."},
+                {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,
@@ -114,7 +110,6 @@ def send_instagram_message(recipient_id, text_message):
         print("[-] PAGE_ACCESS_TOKEN missing", flush=True)
         return
 
-    # Stripping white spaces if any accidentally pasted in env vars
     token = PAGE_ACCESS_TOKEN.strip()
 
     url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
