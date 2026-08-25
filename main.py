@@ -89,14 +89,14 @@ def get_gemini_response(user_message):
     
     clean_key = GEMINI_API_KEY.strip().replace('"', '').replace("'", "")
     
-    # Updated Gemini model endpoint
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={clean_key}"
+    # Updated Gemini Endpoint (gemini-2.0-flash)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={clean_key}"
     
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{
             "parts": [{
-                "text": f"You are a concise Instagram assistant. Reply briefly to: {user_message}"
+                "text": f"You are a helpful Instagram assistant. Keep your response brief.\nUser message: {user_message}"
             }]
         }]
     }
@@ -121,17 +121,14 @@ def send_instagram_message(recipient_id, text_message):
 
     clean_token = str(PAGE_ACCESS_TOKEN).strip().replace('"', '').replace("'", "")
 
-    # Instagram Account ID endpoint for send API
-    url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {clean_token}"
-    }
+    # Meta Graph URL - Using /me/messages with access_token in params
+    url = f"https://graph.facebook.com/v20.0/me/messages?access_token={clean_token}"
+    headers = {"Content-Type": "application/json"}
     
     payload = {
         "recipient": {"id": recipient_id},
-        "message": {"text": text_message}
+        "message": {"text": text_message},
+        "messaging_type": "RESPONSE"
     }
 
     try:
