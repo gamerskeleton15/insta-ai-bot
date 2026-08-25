@@ -1,7 +1,6 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-import google.generativeai as genai
 
 app = Flask(__name__)
 
@@ -12,13 +11,9 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 INSTAGRAM_ACCOUNT_ID = "17841415584226490"
 
-# Configure Google Gemini AI
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY.strip())
-
 @app.route('/', methods=['GET'])
 def home():
-    return "Instagram AI Bot (Gemini) is running!", 200
+    return "Instagram AI Bot (Gemini REST) is running!", 200
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -89,19 +84,33 @@ def webhook():
 
 def get_gemini_response(user_message):
     if not GEMINI_API_KEY:
-        print("[-] GEMINI_API_KEY missing in environment variables", flush=True)
+        print("[-] GEMINI_API_KEY missing", flush=True)
         return "AI service unconfigured."
+    
+    clean_key = GEMINI_API_KEY.strip().replace('"', '').replace("'", "")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={clean_key}"
+    
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": f"You are a concise Instagram chat assistant. Reply briefly to: {user_message}"
+            }]
+        }]
+    }
+
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = (
-            "You are a helpful and concise Instagram assistant. "
-            f"Keep your replies brief and chat-friendly.\nUser message: {user_message}"
-        )
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        res = requests.post(url, json=payload, headers=headers)
+        res_data = res.json()
+        
+        if res.status_code == 200:
+            return res_data['candidates'][0]['content']['parts'][0]['text'].strip()
+        else:
+            print(f"[-] GEMINI REST ERROR: {res.status_code} - {res.text}", flush=True)
+            return "Sorry, I couldn't process that right now."
     except Exception as e:
-        print(f"[-] GEMINI ERROR: {str(e)}", flush=True)
-        return "Sorry, I couldn't process that right now."
+        print(f"[-] GEMINI EXCEPTION: {str(e)}", flush=True)
+        return "Error generating response."
 
 def send_instagram_message(recipient_id, text_message):
     if not PAGE_ACCESS_TOKEN:
@@ -110,8 +119,8 @@ def send_instagram_message(recipient_id, text_message):
 
     clean_token = str(PAGE_ACCESS_TOKEN).strip().replace('"', '').replace("'", "")
 
-    url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
-    params = {"access_token": clean_token}
+    # Using Query String approach for v20.0
+    url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages?access_token={clean_token}"
     headers = {"Content-Type": "application/json"}
     
     payload = {
@@ -121,7 +130,7 @@ def send_instagram_message(recipient_id, text_message):
     }
 
     try:
-        res = requests.post(url, params=params, json=payload, headers=headers)
+        res = requests.post(url, json=payload, headers=headers)
         print(f"[+] META GRAPH API HTTP STATUS: {res.status_code}", flush=True)
         print(f"[+] META GRAPH API RESPONSE: {res.text}", flush=True)
     except Exception as e:
