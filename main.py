@@ -10,7 +10,7 @@ VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "my_secure_verify_token")
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# Instagram Business Account ID (Meta Dashboard se)
+# Instagram Business Account ID
 INSTAGRAM_ACCOUNT_ID = "17841415584226490"
 
 # Groq Client Setup
@@ -29,10 +29,10 @@ def verify_webhook():
 
     if mode and token:
         if mode == 'subscribe' and token == VERIFY_TOKEN:
-            print("WEBHOOK_VERIFIED SUCCESSFULLY")
+            print("WEBHOOK_VERIFIED SUCCESSFULLY", flush=True)
             return challenge, 200
         else:
-            print("VERIFICATION_FAILED: Invalid token")
+            print("VERIFICATION_FAILED: Invalid token", flush=True)
             return "Forbidden", 403
     return "Bad Request", 400
 
@@ -40,39 +40,50 @@ def verify_webhook():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-    print("--- INCOMING WEBHOOK PAYLOAD ---")
-    print(data)
+    print("--- INCOMING WEBHOOK PAYLOAD ---", flush=True)
+    print(data, flush=True)
+
+    if not data:
+        return "NO_DATA", 200
 
     try:
-        if data.get("object") in ["instagram", "page"]:
-            for entry in data.get("entry", []):
-                messaging_events = entry.get("messaging", [])
-                for event in messaging_events:
-                    sender_id = event.get("sender", {}).get("id")
+        for entry in data.get("entry", []):
+            # Standard Instagram Messaging Format
+            messaging_events = entry.get("messaging", [])
+            
+            # Alternative Changes Format (Meta Webhook Test)
+            if not messaging_events and "changes" in entry:
+                for change in entry.get("changes", []):
+                    value = change.get("value", {})
+                    if "messages" in value:
+                        messaging_events = value.get("messages", [])
+
+            for event in messaging_events:
+                sender_id = event.get("sender", {}).get("id") or event.get("from", {}).get("id")
+                
+                message_obj = event.get("message", {})
+                user_text = message_obj.get("text")
+                is_echo = message_obj.get("is_echo", False)
+
+                if user_text and sender_id and not is_echo:
+                    print(f"[+] Processing message from {sender_id}: {user_text}", flush=True)
                     
-                    # Ignore bot's own sent messages (echoes)
-                    if event.get("message") and not event.get("message", {}).get("is_echo"):
-                        user_text = event.get("message", {}).get("text")
-                        
-                        if user_text and sender_id:
-                            print(f"[+] Message received from {sender_id}: {user_text}")
-                            
-                            # 1. Generate Response via Groq AI
-                            ai_reply = get_groq_response(user_text)
-                            print(f"[+] AI Response Generated: {ai_reply}")
-                            
-                            # 2. Send Response Back to User
-                            send_instagram_message(sender_id, ai_reply)
+                    # 1. Generate AI Reply
+                    ai_reply = get_groq_response(user_text)
+                    print(f"[+] AI Response: {ai_reply}", flush=True)
+                    
+                    # 2. Send Message Back
+                    send_instagram_message(sender_id, ai_reply)
 
     except Exception as e:
-        print(f"[-] ERROR IN WEBHOOK EXECUTION: {str(e)}")
+        print(f"[-] ERROR IN WEBHOOK EXECUTION: {str(e)}", flush=True)
 
     return "EVENT_RECEIVED", 200
 
 def get_groq_response(user_message):
     """Groq API Call to Generate AI Reply"""
     if not groq_client:
-        print("[-] GROQ_API_KEY missing in Environment Variables")
+        print("[-] GROQ_API_KEY missing in Environment Variables", flush=True)
         return "Sorry, AI service is currently unconfigured."
     
     try:
@@ -87,16 +98,15 @@ def get_groq_response(user_message):
         )
         return completion.choices[0].message.content
     except Exception as e:
-        print(f"[-] GROQ API ERROR: {str(e)}")
+        print(f"[-] GROQ API ERROR: {str(e)}", flush=True)
         return "Sorry, I couldn't process that right now."
 
 def send_instagram_message(recipient_id, text_message):
     """Send Message back using Meta Graph API"""
     if not PAGE_ACCESS_TOKEN:
-        print("[-] PAGE_ACCESS_TOKEN missing in Environment Variables")
+        print("[-] PAGE_ACCESS_TOKEN missing in Environment Variables", flush=True)
         return
 
-    # Direct Instagram Account Messages Endpoint
     url = f"https://graph.facebook.com/v19.0/{INSTAGRAM_ACCOUNT_ID}/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
     headers = {"Content-Type": "application/json"}
@@ -109,10 +119,10 @@ def send_instagram_message(recipient_id, text_message):
 
     try:
         response = requests.post(url, params=params, json=payload, headers=headers)
-        print(f"[+] META API Response Code: {response.status_code}")
-        print(f"[+] META API Response Body: {response.text}")
+        print(f"[+] META API Status Code: {response.status_code}", flush=True)
+        print(f"[+] META API Response: {response.text}", flush=True)
     except Exception as e:
-        print(f"[-] META API REQUEST FAILED: {str(e)}")
+        print(f"[-] META API REQUEST FAILED: {str(e)}", flush=True)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
