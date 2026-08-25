@@ -10,6 +10,9 @@ VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "my_secure_verify_token")
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
+# Instagram Business Account ID (Meta Dashboard se)
+INSTAGRAM_ACCOUNT_ID = "17841415584226490"
+
 # Groq Client Setup
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
@@ -41,14 +44,13 @@ def webhook():
     print(data)
 
     try:
-        if data.get("object") == "instagram" or data.get("object") == "page":
+        if data.get("object") in ["instagram", "page"]:
             for entry in data.get("entry", []):
-                # Process Messaging Events
                 messaging_events = entry.get("messaging", [])
                 for event in messaging_events:
                     sender_id = event.get("sender", {}).get("id")
                     
-                    # Ignore echoes/bot's own sent messages
+                    # Ignore bot's own sent messages (echoes)
                     if event.get("message") and not event.get("message", {}).get("is_echo"):
                         user_text = event.get("message", {}).get("text")
                         
@@ -59,7 +61,7 @@ def webhook():
                             ai_reply = get_groq_response(user_text)
                             print(f"[+] AI Response Generated: {ai_reply}")
                             
-                            # 2. Send Response Back to Instagram User
+                            # 2. Send Response Back to User
                             send_instagram_message(sender_id, ai_reply)
 
     except Exception as e:
@@ -77,7 +79,7 @@ def get_groq_response(user_message):
         completion = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a helpful, friendly Instagram AI assistant. Keep your responses short, natural, and friendly for chat."},
+                {"role": "system", "content": "You are a helpful, friendly Instagram AI assistant. Keep responses short and simple for chat."},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,
@@ -94,13 +96,15 @@ def send_instagram_message(recipient_id, text_message):
         print("[-] PAGE_ACCESS_TOKEN missing in Environment Variables")
         return
 
-    url = f"https://graph.facebook.com/v19.0/me/messages"
+    # Direct Instagram Account Messages Endpoint
+    url = f"https://graph.facebook.com/v19.0/{INSTAGRAM_ACCOUNT_ID}/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
     headers = {"Content-Type": "application/json"}
     
     payload = {
         "recipient": {"id": recipient_id},
-        "message": {"text": text_message}
+        "message": {"text": text_message},
+        "messaging_type": "RESPONSE"
     }
 
     try:
