@@ -1,6 +1,4 @@
 import os
-import sys
-import json
 import requests
 from flask import Flask, request, jsonify
 from groq import Groq
@@ -8,93 +6,109 @@ from groq import Groq
 app = Flask(__name__)
 
 # Environment Variables
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mysecrettoken")
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "my_secure_verify_token")
+PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# Initialize Groq Client
+# Groq Client Setup
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-@app.route("/", methods=["GET"])
+@app.route('/', methods=['GET'])
 def home():
-    return "Instagram AI Bot is Running!", 200
+    return "Instagram AI Bot is running!", 200
 
-@app.route("/webhook", methods=["GET"])
+# Meta Webhook Verification
+@app.route('/webhook', methods=['GET'])
 def verify_webhook():
-    mode = request.args.get("hub.mode")
-    token = request.args.get("hub.verify_token")
-    challenge = request.args.get("hub.challenge")
+    mode = request.args.get('hub.mode')
+    token = request.args.get('hub.verify_token')
+    challenge = request.args.get('hub.challenge')
 
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        print("WEBHOOK_VERIFIED Successfully!", flush=True)
-        return challenge, 200
-    else:
-        print("Webhook Verification Failed!", flush=True)
-        return "Forbidden", 403
+    if mode and token:
+        if mode == 'subscribe' and token == VERIFY_TOKEN:
+            print("WEBHOOK_VERIFIED SUCCESSFULLY")
+            return challenge, 200
+        else:
+            print("VERIFICATION_FAILED: Invalid token")
+            return "Forbidden", 403
+    return "Bad Request", 400
 
-@app.route("/webhook", methods=["POST"])
+# Webhook Message Handler
+@app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-    print("Received Webhook Payload:", json.dumps(data), flush=True)
+    print("--- INCOMING WEBHOOK PAYLOAD ---")
+    print(data)
 
-    if data.get("object") == "instagram":
-        for entry in data.get("entry", []):
-            for messaging_event in entry.get("messaging", []):
-                sender_id = messaging_event.get("sender", {}).get("id")
-                message = messaging_event.get("message", {})
-                
-                # Echo messages ignore karein
-                if message.get("is_echo"):
-                    continue
+    try:
+        if data.get("object") == "instagram" or data.get("object") == "page":
+            for entry in data.get("entry", []):
+                # Process Messaging Events
+                messaging_events = entry.get("messaging", [])
+                for event in messaging_events:
+                    sender_id = event.get("sender", {}).get("id")
+                    
+                    # Ignore echoes/bot's own sent messages
+                    if event.get("message") and not event.get("message", {}).get("is_echo"):
+                        user_text = event.get("message", {}).get("text")
+                        
+                        if user_text and sender_id:
+                            print(f"[+] Message received from {sender_id}: {user_text}")
+                            
+                            # 1. Generate Response via Groq AI
+                            ai_reply = get_groq_response(user_text)
+                            print(f"[+] AI Response Generated: {ai_reply}")
+                            
+                            # 2. Send Response Back to Instagram User
+                            send_instagram_message(sender_id, ai_reply)
 
-                message_text = message.get("text")
-                if sender_id and message_text:
-                    print(f"Message from {sender_id}: {message_text}", flush=True)
-                    reply_text = get_ai_response(message_text)
-                    send_instagram_message(sender_id, reply_text)
+    except Exception as e:
+        print(f"[-] ERROR IN WEBHOOK EXECUTION: {str(e)}")
 
     return "EVENT_RECEIVED", 200
 
-def get_ai_response(user_message):
+def get_groq_response(user_message):
+    """Groq API Call to Generate AI Reply"""
     if not groq_client:
-        print("ERROR: GROQ_API_KEY is missing in Environment Variables!", flush=True)
+        print("[-] GROQ_API_KEY missing in Environment Variables")
         return "Sorry, AI service is currently unconfigured."
-
+    
     try:
-        response = groq_client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a helpful and friendly Instagram AI assistant. Keep your responses short and engaging."},
+                {"role": "system", "content": "You are a helpful, friendly Instagram AI assistant. Keep your responses short, natural, and friendly for chat."},
                 {"role": "user", "content": user_message}
             ],
+            temperature=0.7,
             max_tokens=150
         )
-        ai_reply = response.choices[0].message.content
-        print(f"Groq AI Reply: {ai_reply}", flush=True)
-        return ai_reply
+        return completion.choices[0].message.content
     except Exception as e:
-        print(f"ERROR generating AI response: {str(e)}", flush=True)
-        return "Sorry, I am having trouble responding right now."
+        print(f"[-] GROQ API ERROR: {str(e)}")
+        return "Sorry, I couldn't process that right now."
 
-def send_instagram_message(recipient_id, message_text):
+def send_instagram_message(recipient_id, text_message):
+    """Send Message back using Meta Graph API"""
     if not PAGE_ACCESS_TOKEN:
-        print("ERROR: PAGE_ACCESS_TOKEN is missing in Environment Variables!", flush=True)
+        print("[-] PAGE_ACCESS_TOKEN missing in Environment Variables")
         return
 
-    url = f"https://graph.facebook.com/v19.0/me/messages?access_token={PAGE_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v19.0/me/messages"
+    params = {"access_token": PAGE_ACCESS_TOKEN}
+    headers = {"Content-Type": "application/json"}
+    
     payload = {
         "recipient": {"id": recipient_id},
-        "message": {"text": message_text}
+        "message": {"text": text_message}
     }
-    headers = {"Content-Type": "application/json"}
 
-    print(f"Sending message to {recipient_id}...", flush=True)
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        print(f"Meta API Status Code: {response.status_code}", flush=True)
-        print(f"Meta API Response: {response.text}", flush=True)
+        response = requests.post(url, params=params, json=payload, headers=headers)
+        print(f"[+] META API Response Code: {response.status_code}")
+        print(f"[+] META API Response Body: {response.text}")
     except Exception as e:
-        print(f"ERROR sending message via Meta API: {str(e)}", flush=True)
+        print(f"[-] META API REQUEST FAILED: {str(e)}")
 
-if __name__ == "__main__":
-    app.run(port=5000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
