@@ -89,14 +89,14 @@ def get_gemini_response(user_message):
     
     clean_key = GEMINI_API_KEY.strip().replace('"', '').replace("'", "")
     
-    # Updated to stable v1 endpoint with gemini-1.5-flash
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={clean_key}"
+    # Updated model string to gemini-2.0-flash / gemini-1.5-flash-8b
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={clean_key}"
     
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{
             "parts": [{
-                "text": f"You are a helpful and concise Instagram chat assistant. Reply briefly to: {user_message}"
+                "text": f"You are a concise Instagram assistant. Reply briefly to: {user_message}"
             }]
         }]
     }
@@ -109,13 +109,11 @@ def get_gemini_response(user_message):
             return res_data['candidates'][0]['content']['parts'][0]['text'].strip()
         else:
             print(f"[-] GEMINI REST ERROR: {res.status_code} - {res.text}", flush=True)
-            
-            # Fallback to gemini-1.5-flash-latest on v1beta
-            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={clean_key}"
-            fb_res = requests.post(fallback_url, json=payload, headers=headers)
+            # Fallback model attempt
+            fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key={clean_key}"
+            fb_res = requests.post(fb_url, json=payload, headers=headers)
             if fb_res.status_code == 200:
                 return fb_res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-                
             return "Sorry, I couldn't process that right now."
     except Exception as e:
         print(f"[-] GEMINI EXCEPTION: {str(e)}", flush=True)
@@ -128,12 +126,11 @@ def send_instagram_message(recipient_id, text_message):
 
     clean_token = str(PAGE_ACCESS_TOKEN).strip().replace('"', '').replace("'", "")
 
-    url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
+    # Updated Meta endpoint to /v20.0/me/messages for Page Access Tokens
+    url = "https://graph.facebook.com/v20.0/me/messages"
     
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {clean_token}"
-    }
+    params = {"access_token": clean_token}
+    headers = {"Content-Type": "application/json"}
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -142,7 +139,7 @@ def send_instagram_message(recipient_id, text_message):
     }
 
     try:
-        res = requests.post(url, json=payload, headers=headers)
+        res = requests.post(url, params=params, json=payload, headers=headers)
         print(f"[+] META GRAPH API HTTP STATUS: {res.status_code}", flush=True)
         print(f"[+] META GRAPH API RESPONSE: {res.text}", flush=True)
     except Exception as e:
