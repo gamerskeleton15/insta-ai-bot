@@ -1,20 +1,24 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-from groq import Groq
+import google.generativeai as genai
 
 app = Flask(__name__)
 
 # Environment Variables
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "my_secure_verify_token")
 PAGE_ACCESS_TOKEN = os.environ.get("PAGE_ACCESS_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 INSTAGRAM_ACCOUNT_ID = "17841415584226490"
 
+# Configure Google Gemini AI
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY.strip())
+
 @app.route('/', methods=['GET'])
 def home():
-    return "Instagram AI Bot is running!", 200
+    return "Instagram AI Bot (Gemini) is running!", 200
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -75,7 +79,7 @@ def webhook():
 
                 if sender_id and user_text:
                     print(f"[+] Processing message from {sender_id}: {user_text}", flush=True)
-                    ai_reply = get_groq_response(user_text)
+                    ai_reply = get_gemini_response(user_text)
                     send_instagram_message(sender_id, ai_reply)
 
     except Exception as e:
@@ -83,49 +87,28 @@ def webhook():
 
     return "EVENT_RECEIVED", 200
 
-def get_groq_response(user_message):
-    if not GROQ_API_KEY:
-        print("[-] GROQ_API_KEY missing", flush=True)
+def get_gemini_response(user_message):
+    if not GEMINI_API_KEY:
+        print("[-] GEMINI_API_KEY missing in environment variables", flush=True)
         return "AI service unconfigured."
     try:
-        client = Groq(api_key=GROQ_API_KEY.strip())
-        
-        # Try active models with fallback
-        try:
-            completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.7,
-                max_tokens=150
-            )
-            return completion.choices[0].message.content
-        except Exception as inner_e:
-            print(f"[!] Primary model failed, trying fallback: {str(inner_e)}", flush=True)
-            completion = client.chat.completions.create(
-                model="mixtral-8x7b-32768",
-                messages=[
-                    {"role": "system", "content": "You are a friendly Instagram assistant. Keep replies short and helpful."},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.7,
-                max_tokens=150
-            )
-            return completion.choices[0].message.content
-
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = (
+            "You are a helpful and concise Instagram assistant. "
+            f"Keep your replies brief and chat-friendly.\nUser message: {user_message}"
+        )
+        response = model.generate_content(prompt)
+        return response.text.strip()
     except Exception as e:
-        print(f"[-] GROQ ERROR: {str(e)}", flush=True)
-        return "Error generating response."
+        print(f"[-] GEMINI ERROR: {str(e)}", flush=True)
+        return "Sorry, I couldn't process that right now."
 
 def send_instagram_message(recipient_id, text_message):
     if not PAGE_ACCESS_TOKEN:
         print("[-] PAGE_ACCESS_TOKEN missing", flush=True)
         return
 
-    # Clean space and quotes issue
-    clean_token = PAGE_ACCESS_TOKEN.strip().strip('"').strip("'")
+    clean_token = str(PAGE_ACCESS_TOKEN).strip().replace('"', '').replace("'", "")
 
     url = f"https://graph.facebook.com/v20.0/{INSTAGRAM_ACCOUNT_ID}/messages"
     params = {"access_token": clean_token}
