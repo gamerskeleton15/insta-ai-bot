@@ -2,3 +2,6 @@ flask
 requests
 groq
 gunicorn
+flask
+requests
+google-generativeai
